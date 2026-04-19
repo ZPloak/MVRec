@@ -1,6 +1,5 @@
 -- =============================================
--- MOVEMENT RECORDER GUI (Target-Relative + Visible Radius + Pathfinding)
--- OUTPUTS COMPRESSED FORMAT: {V3(x,y,z), bool}
+-- MOVEMENT RECORDER GUI - Outputs formatted horizontal blocks
 -- =============================================
 
 local player = game.Players.LocalPlayer
@@ -24,7 +23,7 @@ MainFrame.Name = "MainFrame"
 MainFrame.Parent = ScreenGui
 MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 MainFrame.Position = UDim2.new(0.5, 0, 0.35, 0)
-MainFrame.Size = UDim2.new(0, 340, 0, 420)
+MainFrame.Size = UDim2.new(0, 340, 0, 450)
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
@@ -129,10 +128,37 @@ PointsLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
 PointsLabel.TextSize = 12
 PointsLabel.TextXAlignment = Enum.TextXAlignment.Left
 
+-- Points Per Line Setting
+local PerLineLabel = Instance.new("TextLabel")
+PerLineLabel.Parent = MainFrame
+PerLineLabel.Position = UDim2.new(0, 15, 0, 185)
+PerLineLabel.Size = UDim2.new(0, 120, 0, 20)
+PerLineLabel.BackgroundTransparency = 1
+PerLineLabel.Font = Enum.Font.Gotham
+PerLineLabel.Text = "Points per line:"
+PerLineLabel.TextColor3 = Color3.fromRGB(150, 150, 160)
+PerLineLabel.TextSize = 11
+PerLineLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local PerLineBox = Instance.new("TextBox")
+PerLineBox.Parent = MainFrame
+PerLineBox.Position = UDim2.new(0, 130, 0, 183)
+PerLineBox.Size = UDim2.new(0, 40, 0, 24)
+PerLineBox.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+PerLineBox.BorderSizePixel = 0
+PerLineBox.Font = Enum.Font.Gotham
+PerLineBox.Text = "3"
+PerLineBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+PerLineBox.TextSize = 11
+
+local PerLineCorner = Instance.new("UICorner")
+PerLineCorner.CornerRadius = UDim.new(0, 4)
+PerLineCorner.Parent = PerLineBox
+
 -- Button Row 1: Record / Stop
 local RecordButton = Instance.new("TextButton")
 RecordButton.Parent = MainFrame
-RecordButton.Position = UDim2.new(0, 15, 0, 195)
+RecordButton.Position = UDim2.new(0, 15, 0, 220)
 RecordButton.Size = UDim2.new(0.5, -20, 0, 36)
 RecordButton.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
 RecordButton.BorderSizePixel = 0
@@ -147,7 +173,7 @@ RecordCorner.Parent = RecordButton
 
 local StopRecordButton = Instance.new("TextButton")
 StopRecordButton.Parent = MainFrame
-StopRecordButton.Position = UDim2.new(0.5, 5, 0, 195)
+StopRecordButton.Position = UDim2.new(0.5, 5, 0, 220)
 StopRecordButton.Size = UDim2.new(0.5, -20, 0, 36)
 StopRecordButton.BackgroundColor3 = Color3.fromRGB(255, 150, 50)
 StopRecordButton.BorderSizePixel = 0
@@ -163,7 +189,7 @@ StopRecordCorner.Parent = StopRecordButton
 -- Button Row 2: Play / Stop Play
 local PlayButton = Instance.new("TextButton")
 PlayButton.Parent = MainFrame
-PlayButton.Position = UDim2.new(0, 15, 0, 240)
+PlayButton.Position = UDim2.new(0, 15, 0, 265)
 PlayButton.Size = UDim2.new(0.5, -20, 0, 36)
 PlayButton.BackgroundColor3 = Color3.fromRGB(50, 200, 100)
 PlayButton.BorderSizePixel = 0
@@ -178,7 +204,7 @@ PlayCorner.Parent = PlayButton
 
 local StopPlayButton = Instance.new("TextButton")
 StopPlayButton.Parent = MainFrame
-StopPlayButton.Position = UDim2.new(0.5, 5, 0, 240)
+StopPlayButton.Position = UDim2.new(0.5, 5, 0, 265)
 StopPlayButton.Size = UDim2.new(0.5, -20, 0, 36)
 StopPlayButton.BackgroundColor3 = Color3.fromRGB(200, 100, 50)
 StopPlayButton.BorderSizePixel = 0
@@ -194,7 +220,7 @@ StopPlayCorner.Parent = StopPlayButton
 -- Button Row 3: Copy / Clear
 local CopyButton = Instance.new("TextButton")
 CopyButton.Parent = MainFrame
-CopyButton.Position = UDim2.new(0, 15, 0, 285)
+CopyButton.Position = UDim2.new(0, 15, 0, 310)
 CopyButton.Size = UDim2.new(0.5, -20, 0, 36)
 CopyButton.BackgroundColor3 = Color3.fromRGB(80, 120, 255)
 CopyButton.BorderSizePixel = 0
@@ -209,7 +235,7 @@ CopyCorner.Parent = CopyButton
 
 local ClearButton = Instance.new("TextButton")
 ClearButton.Parent = MainFrame
-ClearButton.Position = UDim2.new(0.5, 5, 0, 285)
+ClearButton.Position = UDim2.new(0.5, 5, 0, 310)
 ClearButton.Size = UDim2.new(0.5, -20, 0, 36)
 ClearButton.BackgroundColor3 = Color3.fromRGB(100, 100, 110)
 ClearButton.BorderSizePixel = 0
@@ -225,7 +251,7 @@ ClearCorner.Parent = ClearButton
 -- Mode Toggle
 local ModeToggle = Instance.new("TextButton")
 ModeToggle.Parent = MainFrame
-ModeToggle.Position = UDim2.new(0, 15, 0, 330)
+ModeToggle.Position = UDim2.new(0, 15, 0, 355)
 ModeToggle.Size = UDim2.new(1, -30, 0, 32)
 ModeToggle.BackgroundColor3 = Color3.fromRGB(50, 150, 200)
 ModeToggle.BorderSizePixel = 0
@@ -238,35 +264,17 @@ local ModeToggleCorner = Instance.new("UICorner")
 ModeToggleCorner.CornerRadius = UDim.new(0, 6)
 ModeToggleCorner.Parent = ModeToggle
 
--- Output Format Toggle
-local FormatToggle = Instance.new("TextButton")
-FormatToggle.Parent = MainFrame
-FormatToggle.Position = UDim2.new(0, 15, 0, 368)
-FormatToggle.Size = UDim2.new(1, -30, 0, 28)
-FormatToggle.BackgroundColor3 = Color3.fromRGB(100, 80, 200)
-FormatToggle.BorderSizePixel = 0
-FormatToggle.Font = Enum.Font.GothamBold
-FormatToggle.Text = "Format: Compressed {V3, bool}"
-FormatToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-FormatToggle.TextSize = 11
-
-local FormatToggleCorner = Instance.new("UICorner")
-FormatToggleCorner.CornerRadius = UDim.new(0, 6)
-FormatToggleCorner.Parent = FormatToggle
-
--- Output Box
-local OutputBox = Instance.new("TextBox")
-OutputBox.Parent = MainFrame
-OutputBox.Position = UDim2.new(0, 15, 0, 400)
-OutputBox.Size = UDim2.new(1, -30, 0, 25)
-OutputBox.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
-OutputBox.BorderSizePixel = 0
-OutputBox.Font = Enum.Font.Code
-OutputBox.Text = ""
-OutputBox.TextColor3 = Color3.fromRGB(200, 200, 200)
-OutputBox.TextSize = 9
-OutputBox.ClearTextOnFocus = false
-OutputBox.Visible = false
+-- Distance Label
+local DistanceLabel = Instance.new("TextLabel")
+DistanceLabel.Parent = MainFrame
+DistanceLabel.Position = UDim2.new(0, 15, 0, 392)
+DistanceLabel.Size = UDim2.new(1, -30, 0, 20)
+DistanceLabel.BackgroundTransparency = 1
+DistanceLabel.Font = Enum.Font.Gotham
+DistanceLabel.Text = "Radius: 15 studs (blue circle)"
+DistanceLabel.TextColor3 = Color3.fromRGB(150, 150, 160)
+DistanceLabel.TextSize = 11
+DistanceLabel.TextXAlignment = Enum.TextXAlignment.Center
 
 -- =============================================
 -- State
@@ -275,7 +283,6 @@ local targetPlayer = nil
 local isRecording = false
 local isPlaying = false
 local relativeMode = true
-local compressedFormat = true  -- true = {V3(x,y,z), bool}, false = full format
 local recordedPoints = {}
 local recordConnection = nil
 local playConnection = nil
@@ -284,6 +291,7 @@ local lastRecordTime = 0
 local lastJumpState = false
 local RECORD_INTERVAL = 0.1
 local RADIUS = 15
+local POINTS_PER_LINE = 3
 
 -- Pathfinding state
 local currentPath = nil
@@ -364,60 +372,46 @@ end
 
 local function updateDisplay()
 	local mode = relativeMode and "Relative" or "Absolute"
-	local format = compressedFormat and "Compressed" or "Full"
-	PointsLabel.Text = string.format("Points: %d | Mode: %s | Format: %s", #recordedPoints, mode, format)
+	PointsLabel.Text = string.format("Points: %d | Mode: %s | Per Line: %d", #recordedPoints, mode, POINTS_PER_LINE)
 end
 
-local function generateCompressedCode()
+local function generateCode()
 	if #recordedPoints == 0 then
 		return "{}"
 	end
 	
 	local lines = {}
 	table.insert(lines, "{")
+	
+	local currentLine = ""
+	local pointsOnLine = 0
 	
 	for i, data in ipairs(recordedPoints) do
 		local jumpStr = data.jump and "true" or "false"
 		local posStr = string.format("V3(%.2f,%.2f,%.2f)", data.offset.X, data.offset.Y, data.offset.Z)
-		local line = string.format("    {%s, %s}", posStr, jumpStr)
+		local pointStr = string.format("{%s, %s}", posStr, jumpStr)
+		
 		if i < #recordedPoints then
-			line = line .. ","
+			pointStr = pointStr .. ","
 		end
-		table.insert(lines, line)
+		
+		if pointsOnLine == 0 then
+			currentLine = "\t\t" .. pointStr
+		else
+			currentLine = currentLine .. " " .. pointStr
+		end
+		
+		pointsOnLine = pointsOnLine + 1
+		
+		if pointsOnLine >= POINTS_PER_LINE or i == #recordedPoints then
+			table.insert(lines, currentLine)
+			currentLine = ""
+			pointsOnLine = 0
+		end
 	end
 	
 	table.insert(lines, "}")
 	return table.concat(lines, "\n")
-end
-
-local function generateFullCode()
-	if #recordedPoints == 0 then
-		return "{}"
-	end
-	
-	local lines = {}
-	table.insert(lines, "{")
-	
-	for i, data in ipairs(recordedPoints) do
-		local jumpStr = data.jump and "true" or "false"
-		local offsetStr = string.format("Vector3.new(%.2f, %.2f, %.2f)", data.offset.X, data.offset.Y, data.offset.Z)
-		local line = string.format("    {offset = %s, jump = %s}", offsetStr, jumpStr)
-		if i < #recordedPoints then
-			line = line .. ","
-		end
-		table.insert(lines, line)
-	end
-	
-	table.insert(lines, "}")
-	return table.concat(lines, "\n")
-end
-
-local function generateCode()
-	if compressedFormat then
-		return generateCompressedCode()
-	else
-		return generateFullCode()
-	end
 end
 
 -- =============================================
@@ -758,11 +752,12 @@ local function copyToClipboard()
 		return
 	end
 	
+	POINTS_PER_LINE = tonumber(PerLineBox.Text) or 3
 	local code = generateCode()
 	
 	pcall(function()
 		setclipboard(code)
-		StatusLabel.Text = "Status: Copied to clipboard! (" .. #recordedPoints .. " points)"
+		StatusLabel.Text = "Status: Copied! (" .. #recordedPoints .. " points)"
 		StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
 	end)
 end
@@ -784,13 +779,6 @@ local function toggleMode()
 	updateDisplay()
 end
 
-local function toggleFormat()
-	compressedFormat = not compressedFormat
-	FormatToggle.Text = compressedFormat and "Format: Compressed {V3, bool}" or "Format: Full {offset=..., jump=...}"
-	FormatToggle.BackgroundColor3 = compressedFormat and Color3.fromRGB(100, 80, 200) or Color3.fromRGB(200, 150, 50)
-	updateDisplay()
-end
-
 -- =============================================
 -- Button Connections
 -- =============================================
@@ -802,7 +790,6 @@ StopPlayButton.MouseButton1Click:Connect(stopPlayback)
 CopyButton.MouseButton1Click:Connect(copyToClipboard)
 ClearButton.MouseButton1Click:Connect(clearRecording)
 ModeToggle.MouseButton1Click:Connect(toggleMode)
-FormatToggle.MouseButton1Click:Connect(toggleFormat)
 
 -- Cleanup
 player.CharacterAdded:Connect(function()
