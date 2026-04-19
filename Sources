@@ -1,0 +1,819 @@
+-- =============================================
+-- MOVEMENT RECORDER GUI (Target-Relative + Visible Radius + Pathfinding)
+-- OUTPUTS COMPRESSED FORMAT: {V3(x,y,z), bool}
+-- =============================================
+
+local player = game.Players.LocalPlayer
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local PathfindingService = game:GetService("PathfindingService")
+
+local PlayerGui = player:WaitForChild("PlayerGui")
+local oldGui = PlayerGui:FindFirstChild("MovementRecorder")
+if oldGui then oldGui:Destroy() end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "MovementRecorder"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = PlayerGui
+
+-- Main Frame
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+MainFrame.Position = UDim2.new(0.5, 0, 0.35, 0)
+MainFrame.Size = UDim2.new(0, 340, 0, 420)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+
+local Corner = Instance.new("UICorner")
+Corner.CornerRadius = UDim.new(0, 10)
+Corner.Parent = MainFrame
+
+-- Title
+local Title = Instance.new("TextLabel")
+Title.Parent = MainFrame
+Title.Size = UDim2.new(1, 0, 0, 35)
+Title.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+Title.BorderSizePixel = 0
+Title.Font = Enum.Font.GothamBold
+Title.Text = "🎬 Movement Recorder"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 16
+
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 10)
+TitleCorner.Parent = Title
+
+-- Target Input Section
+local TargetLabel = Instance.new("TextLabel")
+TargetLabel.Parent = MainFrame
+TargetLabel.Position = UDim2.new(0, 15, 0, 50)
+TargetLabel.Size = UDim2.new(1, -30, 0, 20)
+TargetLabel.BackgroundTransparency = 1
+TargetLabel.Font = Enum.Font.Gotham
+TargetLabel.Text = "Target Player (Username/Display):"
+TargetLabel.TextColor3 = Color3.fromRGB(150, 150, 160)
+TargetLabel.TextSize = 12
+TargetLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local TargetBox = Instance.new("TextBox")
+TargetBox.Parent = MainFrame
+TargetBox.Position = UDim2.new(0, 15, 0, 72)
+TargetBox.Size = UDim2.new(1, -80, 0, 30)
+TargetBox.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+TargetBox.BorderSizePixel = 0
+TargetBox.Font = Enum.Font.Gotham
+TargetBox.PlaceholderColor3 = Color3.fromRGB(100, 100, 110)
+TargetBox.PlaceholderText = "Enter name..."
+TargetBox.Text = ""
+TargetBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+TargetBox.TextSize = 13
+
+local TargetBoxCorner = Instance.new("UICorner")
+TargetBoxCorner.CornerRadius = UDim.new(0, 5)
+TargetBoxCorner.Parent = TargetBox
+
+local SetTargetButton = Instance.new("TextButton")
+SetTargetButton.Parent = MainFrame
+SetTargetButton.Position = UDim2.new(1, -60, 0, 72)
+SetTargetButton.Size = UDim2.new(0, 45, 0, 30)
+SetTargetButton.BackgroundColor3 = Color3.fromRGB(80, 120, 255)
+SetTargetButton.BorderSizePixel = 0
+SetTargetButton.Font = Enum.Font.GothamBold
+SetTargetButton.Text = "Set"
+SetTargetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+SetTargetButton.TextSize = 12
+
+local SetTargetCorner = Instance.new("UICorner")
+SetTargetCorner.CornerRadius = UDim.new(0, 5)
+SetTargetCorner.Parent = SetTargetButton
+
+-- Target Status
+local TargetStatus = Instance.new("TextLabel")
+TargetStatus.Parent = MainFrame
+TargetStatus.Position = UDim2.new(0, 15, 0, 107)
+TargetStatus.Size = UDim2.new(1, -30, 0, 20)
+TargetStatus.BackgroundTransparency = 1
+TargetStatus.Font = Enum.Font.Gotham
+TargetStatus.Text = "No target set"
+TargetStatus.TextColor3 = Color3.fromRGB(255, 150, 100)
+TargetStatus.TextSize = 11
+TargetStatus.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Status Label
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Parent = MainFrame
+StatusLabel.Position = UDim2.new(0, 15, 0, 132)
+StatusLabel.Size = UDim2.new(1, -30, 0, 25)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.Text = "Status: Ready"
+StatusLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+StatusLabel.TextSize = 12
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Points Counter
+local PointsLabel = Instance.new("TextLabel")
+PointsLabel.Parent = MainFrame
+PointsLabel.Position = UDim2.new(0, 15, 0, 157)
+PointsLabel.Size = UDim2.new(1, -30, 0, 25)
+PointsLabel.BackgroundTransparency = 1
+PointsLabel.Font = Enum.Font.Gotham
+PointsLabel.Text = "Points: 0"
+PointsLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
+PointsLabel.TextSize = 12
+PointsLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Button Row 1: Record / Stop
+local RecordButton = Instance.new("TextButton")
+RecordButton.Parent = MainFrame
+RecordButton.Position = UDim2.new(0, 15, 0, 195)
+RecordButton.Size = UDim2.new(0.5, -20, 0, 36)
+RecordButton.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+RecordButton.BorderSizePixel = 0
+RecordButton.Font = Enum.Font.GothamBold
+RecordButton.Text = "🔴 Record"
+RecordButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+RecordButton.TextSize = 13
+
+local RecordCorner = Instance.new("UICorner")
+RecordCorner.CornerRadius = UDim.new(0, 6)
+RecordCorner.Parent = RecordButton
+
+local StopRecordButton = Instance.new("TextButton")
+StopRecordButton.Parent = MainFrame
+StopRecordButton.Position = UDim2.new(0.5, 5, 0, 195)
+StopRecordButton.Size = UDim2.new(0.5, -20, 0, 36)
+StopRecordButton.BackgroundColor3 = Color3.fromRGB(255, 150, 50)
+StopRecordButton.BorderSizePixel = 0
+StopRecordButton.Font = Enum.Font.GothamBold
+StopRecordButton.Text = "⏹️ Stop"
+StopRecordButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+StopRecordButton.TextSize = 13
+
+local StopRecordCorner = Instance.new("UICorner")
+StopRecordCorner.CornerRadius = UDim.new(0, 6)
+StopRecordCorner.Parent = StopRecordButton
+
+-- Button Row 2: Play / Stop Play
+local PlayButton = Instance.new("TextButton")
+PlayButton.Parent = MainFrame
+PlayButton.Position = UDim2.new(0, 15, 0, 240)
+PlayButton.Size = UDim2.new(0.5, -20, 0, 36)
+PlayButton.BackgroundColor3 = Color3.fromRGB(50, 200, 100)
+PlayButton.BorderSizePixel = 0
+PlayButton.Font = Enum.Font.GothamBold
+PlayButton.Text = "▶️ Play"
+PlayButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+PlayButton.TextSize = 13
+
+local PlayCorner = Instance.new("UICorner")
+PlayCorner.CornerRadius = UDim.new(0, 6)
+PlayCorner.Parent = PlayButton
+
+local StopPlayButton = Instance.new("TextButton")
+StopPlayButton.Parent = MainFrame
+StopPlayButton.Position = UDim2.new(0.5, 5, 0, 240)
+StopPlayButton.Size = UDim2.new(0.5, -20, 0, 36)
+StopPlayButton.BackgroundColor3 = Color3.fromRGB(200, 100, 50)
+StopPlayButton.BorderSizePixel = 0
+StopPlayButton.Font = Enum.Font.GothamBold
+StopPlayButton.Text = "⏸️ Stop Play"
+StopPlayButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+StopPlayButton.TextSize = 13
+
+local StopPlayCorner = Instance.new("UICorner")
+StopPlayCorner.CornerRadius = UDim.new(0, 6)
+StopPlayCorner.Parent = StopPlayButton
+
+-- Button Row 3: Copy / Clear
+local CopyButton = Instance.new("TextButton")
+CopyButton.Parent = MainFrame
+CopyButton.Position = UDim2.new(0, 15, 0, 285)
+CopyButton.Size = UDim2.new(0.5, -20, 0, 36)
+CopyButton.BackgroundColor3 = Color3.fromRGB(80, 120, 255)
+CopyButton.BorderSizePixel = 0
+CopyButton.Font = Enum.Font.GothamBold
+CopyButton.Text = "📋 Copy"
+CopyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+CopyButton.TextSize = 13
+
+local CopyCorner = Instance.new("UICorner")
+CopyCorner.CornerRadius = UDim.new(0, 6)
+CopyCorner.Parent = CopyButton
+
+local ClearButton = Instance.new("TextButton")
+ClearButton.Parent = MainFrame
+ClearButton.Position = UDim2.new(0.5, 5, 0, 285)
+ClearButton.Size = UDim2.new(0.5, -20, 0, 36)
+ClearButton.BackgroundColor3 = Color3.fromRGB(100, 100, 110)
+ClearButton.BorderSizePixel = 0
+ClearButton.Font = Enum.Font.GothamBold
+ClearButton.Text = "🗑️ Clear"
+ClearButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ClearButton.TextSize = 13
+
+local ClearCorner = Instance.new("UICorner")
+ClearCorner.CornerRadius = UDim.new(0, 6)
+ClearCorner.Parent = ClearButton
+
+-- Mode Toggle
+local ModeToggle = Instance.new("TextButton")
+ModeToggle.Parent = MainFrame
+ModeToggle.Position = UDim2.new(0, 15, 0, 330)
+ModeToggle.Size = UDim2.new(1, -30, 0, 32)
+ModeToggle.BackgroundColor3 = Color3.fromRGB(50, 150, 200)
+ModeToggle.BorderSizePixel = 0
+ModeToggle.Font = Enum.Font.GothamBold
+ModeToggle.Text = "Mode: Relative to Target"
+ModeToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+ModeToggle.TextSize = 12
+
+local ModeToggleCorner = Instance.new("UICorner")
+ModeToggleCorner.CornerRadius = UDim.new(0, 6)
+ModeToggleCorner.Parent = ModeToggle
+
+-- Output Format Toggle
+local FormatToggle = Instance.new("TextButton")
+FormatToggle.Parent = MainFrame
+FormatToggle.Position = UDim2.new(0, 15, 0, 368)
+FormatToggle.Size = UDim2.new(1, -30, 0, 28)
+FormatToggle.BackgroundColor3 = Color3.fromRGB(100, 80, 200)
+FormatToggle.BorderSizePixel = 0
+FormatToggle.Font = Enum.Font.GothamBold
+FormatToggle.Text = "Format: Compressed {V3, bool}"
+FormatToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+FormatToggle.TextSize = 11
+
+local FormatToggleCorner = Instance.new("UICorner")
+FormatToggleCorner.CornerRadius = UDim.new(0, 6)
+FormatToggleCorner.Parent = FormatToggle
+
+-- Output Box
+local OutputBox = Instance.new("TextBox")
+OutputBox.Parent = MainFrame
+OutputBox.Position = UDim2.new(0, 15, 0, 400)
+OutputBox.Size = UDim2.new(1, -30, 0, 25)
+OutputBox.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+OutputBox.BorderSizePixel = 0
+OutputBox.Font = Enum.Font.Code
+OutputBox.Text = ""
+OutputBox.TextColor3 = Color3.fromRGB(200, 200, 200)
+OutputBox.TextSize = 9
+OutputBox.ClearTextOnFocus = false
+OutputBox.Visible = false
+
+-- =============================================
+-- State
+-- =============================================
+local targetPlayer = nil
+local isRecording = false
+local isPlaying = false
+local relativeMode = true
+local compressedFormat = true  -- true = {V3(x,y,z), bool}, false = full format
+local recordedPoints = {}
+local recordConnection = nil
+local playConnection = nil
+local radiusCircle = nil
+local lastRecordTime = 0
+local lastJumpState = false
+local RECORD_INTERVAL = 0.1
+local RADIUS = 15
+
+-- Pathfinding state
+local currentPath = nil
+local currentWaypointIndex = 1
+local navigatingToStart = false
+local startPointReached = false
+
+-- =============================================
+-- Radius Circle Functions
+-- =============================================
+local function createRadiusCircle()
+	if radiusCircle then
+		radiusCircle:Destroy()
+		radiusCircle = nil
+	end
+	
+	if not targetPlayer or not targetPlayer.Character then return end
+	
+	local targetRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+	if not targetRoot then return end
+	
+	local circle = Instance.new("Part")
+	circle.Name = "RadiusCircle"
+	circle.Shape = Enum.PartType.Cylinder
+	circle.Size = Vector3.new(RADIUS * 2, 0.1, RADIUS * 2)
+	circle.Position = targetRoot.Position + Vector3.new(0, 0.05, 0)
+	circle.Anchored = true
+	circle.CanCollide = false
+	circle.Transparency = 0.7
+	circle.BrickColor = BrickColor.new("Bright blue")
+	circle.Material = Enum.Material.Neon
+	circle.Parent = Workspace
+	
+	local outline = Instance.new("SelectionBox")
+	outline.Name = "RadiusOutline"
+	outline.Adornee = circle
+	outline.LineThickness = 0.05
+	outline.Color3 = Color3.fromRGB(100, 150, 255)
+	outline.Transparency = 0.5
+	outline.Parent = circle
+	
+	radiusCircle = circle
+end
+
+local function updateRadiusCircle()
+	if not targetPlayer or not targetPlayer.Character then
+		if radiusCircle then
+			radiusCircle:Destroy()
+			radiusCircle = nil
+		end
+		return
+	end
+	
+	local targetRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+	if not targetRoot then return end
+	
+	if not radiusCircle then
+		createRadiusCircle()
+	else
+		radiusCircle.Position = targetRoot.Position + Vector3.new(0, 0.05, 0)
+	end
+end
+
+-- =============================================
+-- Helper Functions
+-- =============================================
+local function findPlayer(name)
+	local search = name:lower()
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player then
+			if p.Name:lower():find(search, 1, true) or p.DisplayName:lower():find(search, 1, true) then
+				return p
+			end
+		end
+	end
+	return nil
+end
+
+local function updateDisplay()
+	local mode = relativeMode and "Relative" or "Absolute"
+	local format = compressedFormat and "Compressed" or "Full"
+	PointsLabel.Text = string.format("Points: %d | Mode: %s | Format: %s", #recordedPoints, mode, format)
+end
+
+local function generateCompressedCode()
+	if #recordedPoints == 0 then
+		return "{}"
+	end
+	
+	local lines = {}
+	table.insert(lines, "{")
+	
+	for i, data in ipairs(recordedPoints) do
+		local jumpStr = data.jump and "true" or "false"
+		local posStr = string.format("V3(%.2f,%.2f,%.2f)", data.offset.X, data.offset.Y, data.offset.Z)
+		local line = string.format("    {%s, %s}", posStr, jumpStr)
+		if i < #recordedPoints then
+			line = line .. ","
+		end
+		table.insert(lines, line)
+	end
+	
+	table.insert(lines, "}")
+	return table.concat(lines, "\n")
+end
+
+local function generateFullCode()
+	if #recordedPoints == 0 then
+		return "{}"
+	end
+	
+	local lines = {}
+	table.insert(lines, "{")
+	
+	for i, data in ipairs(recordedPoints) do
+		local jumpStr = data.jump and "true" or "false"
+		local offsetStr = string.format("Vector3.new(%.2f, %.2f, %.2f)", data.offset.X, data.offset.Y, data.offset.Z)
+		local line = string.format("    {offset = %s, jump = %s}", offsetStr, jumpStr)
+		if i < #recordedPoints then
+			line = line .. ","
+		end
+		table.insert(lines, line)
+	end
+	
+	table.insert(lines, "}")
+	return table.concat(lines, "\n")
+end
+
+local function generateCode()
+	if compressedFormat then
+		return generateCompressedCode()
+	else
+		return generateFullCode()
+	end
+end
+
+-- =============================================
+-- Pathfinding to First Point
+-- =============================================
+local function computePathToStart(startPos, targetPos)
+	local path = PathfindingService:CreatePath({
+		AgentRadius = 2,
+		AgentHeight = 5,
+		AgentCanJump = true,
+		AgentJumpHeight = 7.5,
+		AgentMaxSlope = 45,
+		WaypointSpacing = 3,
+	})
+	
+	local success = pcall(function()
+		path:ComputeAsync(startPos, targetPos)
+	end)
+	
+	if success and path.Status == Enum.PathStatus.Success then
+		return path
+	end
+	return nil
+end
+
+local function navigateToFirstPoint(hum, root, targetPos)
+	if not navigatingToStart then return true end
+	
+	local distToStart = (root.Position - targetPos).Magnitude
+	if distToStart < 4 then
+		navigatingToStart = false
+		startPointReached = true
+		currentPath = nil
+		currentWaypointIndex = 1
+		StatusLabel.Text = "Status: Reached start point!"
+		return true
+	end
+	
+	if not currentPath then
+		StatusLabel.Text = "Status: Computing path to start..."
+		currentPath = computePathToStart(root.Position, targetPos)
+		currentWaypointIndex = 1
+		
+		if not currentPath then
+			StatusLabel.Text = "Status: Moving directly to start..."
+			hum:MoveTo(targetPos)
+			return false
+		end
+	end
+	
+	local waypoints = currentPath:GetWaypoints()
+	
+	while currentWaypointIndex <= #waypoints do
+		local wp = waypoints[currentWaypointIndex]
+		if (root.Position - wp.Position).Magnitude < 4 then
+			currentWaypointIndex = currentWaypointIndex + 1
+		else
+			break
+		end
+	end
+	
+	if currentWaypointIndex <= #waypoints then
+		local wp = waypoints[currentWaypointIndex]
+		hum:MoveTo(wp.Position)
+		
+		if wp.Action == Enum.PathWaypointAction.Jump then
+			hum.Jump = true
+		end
+		
+		StatusLabel.Text = string.format("Status: Navigating (%d/%d)", currentWaypointIndex, #waypoints)
+	else
+		currentPath = nil
+	end
+	
+	return false
+end
+
+-- =============================================
+-- Recording Functions
+-- =============================================
+local function startRecording()
+	if isRecording then return end
+	if isPlaying then
+		StatusLabel.Text = "Status: Stop playback first!"
+		return
+	end
+	
+	if relativeMode and not targetPlayer then
+		StatusLabel.Text = "Status: Set a target first!"
+		return
+	end
+	
+	isRecording = true
+	recordedPoints = {}
+	lastJumpState = false
+	
+	RecordButton.BackgroundColor3 = Color3.fromRGB(150, 30, 30)
+	StatusLabel.Text = "Status: Recording..."
+	StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+	
+	recordConnection = RunService.RenderStepped:Connect(function()
+		local now = tick()
+		local char = player.Character
+		if char then
+			local root = char:FindFirstChild("HumanoidRootPart")
+			local hum = char:FindFirstChild("Humanoid")
+			
+			if root and hum then
+				local targetPos = Vector3.zero
+				if relativeMode and targetPlayer and targetPlayer.Character then
+					local targetRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+					if targetRoot then
+						targetPos = targetRoot.Position
+					end
+				end
+				
+				local isJumping = false
+				local velocityY = root.AssemblyLinearVelocity.Y
+				local isInAir = hum.FloorMaterial == Enum.Material.Air
+				
+				if (velocityY > 2 and isInAir) or (hum.Jump and not lastJumpState) then
+					isJumping = true
+				end
+				
+				if now - lastRecordTime >= RECORD_INTERVAL then
+					local offset = relativeMode and (root.Position - targetPos) or root.Position
+					
+					table.insert(recordedPoints, {
+						offset = offset,
+						jump = isJumping
+					})
+					updateDisplay()
+					lastRecordTime = now
+				end
+				
+				lastJumpState = hum.Jump
+			end
+		end
+		
+		updateRadiusCircle()
+	end)
+end
+
+local function stopRecording()
+	if not isRecording then return end
+	
+	isRecording = false
+	if recordConnection then
+		recordConnection:Disconnect()
+		recordConnection = nil
+	end
+	
+	RecordButton.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+	StatusLabel.Text = "Status: Stopped - " .. #recordedPoints .. " points"
+	StatusLabel.TextColor3 = Color3.fromRGB(100, 200, 100)
+	updateDisplay()
+end
+
+-- =============================================
+-- Playback Functions
+-- =============================================
+local function startPlayback()
+	if #recordedPoints == 0 then
+		StatusLabel.Text = "Status: No points recorded!"
+		return
+	end
+	
+	if isRecording then
+		stopRecording()
+	end
+	
+	if isPlaying then return end
+	
+	if relativeMode and not targetPlayer then
+		StatusLabel.Text = "Status: Set a target first!"
+		return
+	end
+	
+	isPlaying = true
+	navigatingToStart = true
+	startPointReached = false
+	currentPath = nil
+	currentWaypointIndex = 1
+	
+	PlayButton.BackgroundColor3 = Color3.fromRGB(30, 150, 70)
+	StatusLabel.Text = "Status: Navigating to start..."
+	StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+	
+	local index = 1
+	local char = player.Character
+	local hum = char and char:FindFirstChild("Humanoid")
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	
+	if not hum or not root then
+		StatusLabel.Text = "Status: Character not found"
+		isPlaying = false
+		return
+	end
+	
+	local jumpTriggered = false
+	
+	playConnection = RunService.RenderStepped:Connect(function()
+		if not isPlaying then
+			if playConnection then
+				playConnection:Disconnect()
+				playConnection = nil
+			end
+			return
+		end
+		
+		char = player.Character
+		hum = char and char:FindFirstChild("Humanoid")
+		root = char and char:FindFirstChild("HumanoidRootPart")
+		
+		if not hum or not root then return end
+		
+		updateRadiusCircle()
+		
+		local targetPos = Vector3.zero
+		if relativeMode and targetPlayer and targetPlayer.Character then
+			local targetRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+			if targetRoot then
+				targetPos = targetRoot.Position
+			else
+				isPlaying = false
+				StatusLabel.Text = "Status: Target lost!"
+				StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+				return
+			end
+		end
+		
+		local firstOffset = recordedPoints[1].offset
+		local firstPointPos = relativeMode and (targetPos + firstOffset) or firstOffset
+		
+		if navigatingToStart then
+			local reached = navigateToFirstPoint(hum, root, firstPointPos)
+			if not reached then
+				return
+			end
+		end
+		
+		if relativeMode then
+			local distToTarget = (root.Position - targetPos).Magnitude
+			if distToTarget > RADIUS + 5 then
+				hum:MoveTo(targetPos)
+				StatusLabel.Text = "Status: Moving to target..."
+				return
+			end
+		end
+		
+		if index <= #recordedPoints then
+			local data = recordedPoints[index]
+			local targetMovePos = relativeMode and (targetPos + data.offset) or data.offset
+			
+			hum:MoveTo(targetMovePos)
+			
+			if data.jump and not jumpTriggered then
+				hum.Jump = true
+				jumpTriggered = true
+			elseif jumpTriggered and hum.FloorMaterial ~= Enum.Material.Air then
+				jumpTriggered = false
+			end
+			
+			local distance = (root.Position - targetMovePos).Magnitude
+			local horizontalDist = (Vector3.new(root.Position.X, 0, root.Position.Z) - Vector3.new(targetMovePos.X, 0, targetMovePos.Z)).Magnitude
+			
+			local threshold = data.jump and 4 or 3
+			local distToUse = data.jump and horizontalDist or distance
+			
+			if distToUse < threshold then
+				index = index + 1
+			end
+			
+			StatusLabel.Text = string.format("Playing... %d/%d", index - 1, #recordedPoints)
+		else
+			stopPlayback()
+			StatusLabel.Text = "Status: Playback complete!"
+			StatusLabel.TextColor3 = Color3.fromRGB(100, 200, 100)
+		end
+	end)
+end
+
+local function stopPlayback()
+	if not isPlaying then return end
+	
+	isPlaying = false
+	navigatingToStart = false
+	startPointReached = false
+	currentPath = nil
+	
+	if playConnection then
+		playConnection:Disconnect()
+		playConnection = nil
+	end
+	
+	PlayButton.BackgroundColor3 = Color3.fromRGB(50, 200, 100)
+	
+	local char = player.Character
+	if char then
+		local hum = char:FindFirstChild("Humanoid")
+		if hum and char:FindFirstChild("HumanoidRootPart") then
+			hum:MoveTo(char.HumanoidRootPart.Position)
+		end
+	end
+	
+	if #recordedPoints > 0 then
+		StatusLabel.Text = "Status: Stopped"
+		StatusLabel.TextColor3 = Color3.fromRGB(100, 200, 100)
+	end
+end
+
+-- =============================================
+-- Other Functions
+-- =============================================
+local function setTarget()
+	local name = TargetBox.Text
+	if name == "" then
+		TargetStatus.Text = "Enter a name!"
+		return
+	end
+	
+	local found = findPlayer(name)
+	if found then
+		targetPlayer = found
+		TargetStatus.Text = "Target: " .. found.DisplayName
+		TargetStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
+		StatusLabel.Text = "Status: Target set to " .. found.DisplayName
+		updateRadiusCircle()
+	else
+		TargetStatus.Text = "Player not found!"
+		TargetStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
+	end
+end
+
+local function copyToClipboard()
+	if #recordedPoints == 0 then
+		StatusLabel.Text = "Status: Nothing to copy!"
+		return
+	end
+	
+	local code = generateCode()
+	
+	pcall(function()
+		setclipboard(code)
+		StatusLabel.Text = "Status: Copied to clipboard! (" .. #recordedPoints .. " points)"
+		StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+	end)
+end
+
+local function clearRecording()
+	if isRecording then stopRecording() end
+	if isPlaying then stopPlayback() end
+	
+	recordedPoints = {}
+	updateDisplay()
+	StatusLabel.Text = "Status: Cleared"
+	StatusLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+end
+
+local function toggleMode()
+	relativeMode = not relativeMode
+	ModeToggle.Text = relativeMode and "Mode: Relative to Target" or "Mode: Absolute (World)"
+	ModeToggle.BackgroundColor3 = relativeMode and Color3.fromRGB(50, 150, 200) or Color3.fromRGB(150, 100, 50)
+	updateDisplay()
+end
+
+local function toggleFormat()
+	compressedFormat = not compressedFormat
+	FormatToggle.Text = compressedFormat and "Format: Compressed {V3, bool}" or "Format: Full {offset=..., jump=...}"
+	FormatToggle.BackgroundColor3 = compressedFormat and Color3.fromRGB(100, 80, 200) or Color3.fromRGB(200, 150, 50)
+	updateDisplay()
+end
+
+-- =============================================
+-- Button Connections
+-- =============================================
+SetTargetButton.MouseButton1Click:Connect(setTarget)
+RecordButton.MouseButton1Click:Connect(startRecording)
+StopRecordButton.MouseButton1Click:Connect(stopRecording)
+PlayButton.MouseButton1Click:Connect(startPlayback)
+StopPlayButton.MouseButton1Click:Connect(stopPlayback)
+CopyButton.MouseButton1Click:Connect(copyToClipboard)
+ClearButton.MouseButton1Click:Connect(clearRecording)
+ModeToggle.MouseButton1Click:Connect(toggleMode)
+FormatToggle.MouseButton1Click:Connect(toggleFormat)
+
+-- Cleanup
+player.CharacterAdded:Connect(function()
+	if isRecording then stopRecording() end
+	if isPlaying then stopPlayback() end
+end)
+
+ScreenGui.Destroying:Connect(function()
+	if radiusCircle then
+		radiusCircle:Destroy()
+	end
+end)
+
+updateDisplay()
