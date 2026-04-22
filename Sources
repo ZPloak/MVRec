@@ -1,5 +1,6 @@
 -- =============================================
 -- MOVEMENT RECORDER GUI - Outputs formatted horizontal blocks
+-- Records position, facing angle, jump, and stopped state
 -- =============================================
 
 local player = game.Players.LocalPlayer
@@ -23,7 +24,7 @@ MainFrame.Name = "MainFrame"
 MainFrame.Parent = ScreenGui
 MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 MainFrame.Position = UDim2.new(0.5, 0, 0.35, 0)
-MainFrame.Size = UDim2.new(0, 340, 0, 450)
+MainFrame.Size = UDim2.new(0, 340, 0, 490)
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
@@ -155,6 +156,33 @@ local PerLineCorner = Instance.new("UICorner")
 PerLineCorner.CornerRadius = UDim.new(0, 4)
 PerLineCorner.Parent = PerLineBox
 
+-- Stop Speed Threshold Setting
+local StopLabel = Instance.new("TextLabel")
+StopLabel.Parent = MainFrame
+StopLabel.Position = UDim2.new(0, 185, 0, 185)
+StopLabel.Size = UDim2.new(0, 90, 0, 20)
+StopLabel.BackgroundTransparency = 1
+StopLabel.Font = Enum.Font.Gotham
+StopLabel.Text = "Stop speed:"
+StopLabel.TextColor3 = Color3.fromRGB(150, 150, 160)
+StopLabel.TextSize = 11
+StopLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local StopSpeedBox = Instance.new("TextBox")
+StopSpeedBox.Parent = MainFrame
+StopSpeedBox.Position = UDim2.new(0, 265, 0, 183)
+StopSpeedBox.Size = UDim2.new(0, 55, 0, 24)
+StopSpeedBox.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+StopSpeedBox.BorderSizePixel = 0
+StopSpeedBox.Font = Enum.Font.Gotham
+StopSpeedBox.Text = "1.5"
+StopSpeedBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+StopSpeedBox.TextSize = 11
+
+local StopSpeedCorner = Instance.new("UICorner")
+StopSpeedCorner.CornerRadius = UDim.new(0, 4)
+StopSpeedCorner.Parent = StopSpeedBox
+
 -- Button Row 1: Record / Stop
 local RecordButton = Instance.new("TextButton")
 RecordButton.Parent = MainFrame
@@ -267,7 +295,7 @@ ModeToggleCorner.Parent = ModeToggle
 -- Distance Label
 local DistanceLabel = Instance.new("TextLabel")
 DistanceLabel.Parent = MainFrame
-DistanceLabel.Position = UDim2.new(0, 15, 0, 392)
+DistanceLabel.Position = UDim2.new(0, 15, 0, 395)
 DistanceLabel.Size = UDim2.new(1, -30, 0, 20)
 DistanceLabel.BackgroundTransparency = 1
 DistanceLabel.Font = Enum.Font.Gotham
@@ -275,6 +303,18 @@ DistanceLabel.Text = "Radius: 15 studs (blue circle)"
 DistanceLabel.TextColor3 = Color3.fromRGB(150, 150, 160)
 DistanceLabel.TextSize = 11
 DistanceLabel.TextXAlignment = Enum.TextXAlignment.Center
+
+-- Face Info Label
+local FaceInfoLabel = Instance.new("TextLabel")
+FaceInfoLabel.Parent = MainFrame
+FaceInfoLabel.Position = UDim2.new(0, 15, 0, 418)
+FaceInfoLabel.Size = UDim2.new(1, -30, 0, 20)
+FaceInfoLabel.BackgroundTransparency = 1
+FaceInfoLabel.Font = Enum.Font.Gotham
+FaceInfoLabel.Text = "Face: 0.00° | Stopped: false"
+FaceInfoLabel.TextColor3 = Color3.fromRGB(120, 220, 180)
+FaceInfoLabel.TextSize = 11
+FaceInfoLabel.TextXAlignment = Enum.TextXAlignment.Center
 
 -- =============================================
 -- State
@@ -289,9 +329,18 @@ local playConnection = nil
 local radiusCircle = nil
 local lastRecordTime = 0
 local lastJumpState = false
-local RECORD_INTERVAL = 0.1
+local RECORD_INTERVAL = 0.05
 local RADIUS = 15
 local POINTS_PER_LINE = 3
+local STOP_SPEED_THRESHOLD = 0.5
+
+-- Smooth facing state
+local currentFacingAngle = 0
+local ROTATION_SPEED = 12  -- higher = snappier, lower = smoother
+
+-- Playback stop-state timer
+local stopHoldTimer = 0
+local STOP_HOLD_DURATION = 0.12
 
 -- Pathfinding state
 local currentPath = nil
@@ -307,12 +356,12 @@ local function createRadiusCircle()
 		radiusCircle:Destroy()
 		radiusCircle = nil
 	end
-	
+
 	if not targetPlayer or not targetPlayer.Character then return end
-	
+
 	local targetRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
 	if not targetRoot then return end
-	
+
 	local circle = Instance.new("Part")
 	circle.Name = "RadiusCircle"
 	circle.Shape = Enum.PartType.Cylinder
@@ -324,7 +373,7 @@ local function createRadiusCircle()
 	circle.BrickColor = BrickColor.new("Bright blue")
 	circle.Material = Enum.Material.Neon
 	circle.Parent = Workspace
-	
+
 	local outline = Instance.new("SelectionBox")
 	outline.Name = "RadiusOutline"
 	outline.Adornee = circle
@@ -332,7 +381,7 @@ local function createRadiusCircle()
 	outline.Color3 = Color3.fromRGB(100, 150, 255)
 	outline.Transparency = 0.5
 	outline.Parent = circle
-	
+
 	radiusCircle = circle
 end
 
@@ -344,10 +393,10 @@ local function updateRadiusCircle()
 		end
 		return
 	end
-	
+
 	local targetRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
 	if not targetRoot then return end
-	
+
 	if not radiusCircle then
 		createRadiusCircle()
 	else
@@ -375,41 +424,60 @@ local function updateDisplay()
 	PointsLabel.Text = string.format("Points: %d | Mode: %s | Per Line: %d", #recordedPoints, mode, POINTS_PER_LINE)
 end
 
+local function getLookAngle(root)
+	local look = root.CFrame.LookVector
+	return math.atan2(-look.X, -look.Z)
+end
+
+-- Smoothly interpolate yaw angle (handles ±π wraparound)
+local function lerpAngle(a, b, t)
+	local diff = ((b - a + math.pi) % (math.pi * 2)) - math.pi
+	return a + diff * t
+end
+
+local function applyFacingSmooth(root, targetAngle, dt)
+	currentFacingAngle = lerpAngle(currentFacingAngle, targetAngle, math.min(1, dt * ROTATION_SPEED))
+	local pos = root.Position
+	root.CFrame = CFrame.new(pos) * CFrame.Angles(0, currentFacingAngle, 0)
+end
+
 local function generateCode()
 	if #recordedPoints == 0 then
 		return "{}"
 	end
-	
+
 	local lines = {}
 	table.insert(lines, "{")
-	
+
 	local currentLine = ""
 	local pointsOnLine = 0
-	
+
 	for i, data in ipairs(recordedPoints) do
-		local jumpStr = data.jump and "true" or "false"
-		local posStr = string.format("V3(%.2f,%.2f,%.2f)", data.offset.X, data.offset.Y, data.offset.Z)
-		local pointStr = string.format("{%s, %s}", posStr, jumpStr)
-		
+		local jumpStr    = data.jump    and "true" or "false"
+		local stoppedStr = data.stopped and "true" or "false"
+		local posStr   = string.format("V3(%.2f,%.2f,%.2f)", data.offset.X, data.offset.Y, data.offset.Z)
+		local angleStr = string.format("%.4f", data.angle)
+		local pointStr = string.format("{%s, %s, %s, %s}", posStr, angleStr, jumpStr, stoppedStr)
+
 		if i < #recordedPoints then
 			pointStr = pointStr .. ","
 		end
-		
+
 		if pointsOnLine == 0 then
 			currentLine = "\t\t" .. pointStr
 		else
 			currentLine = currentLine .. " " .. pointStr
 		end
-		
+
 		pointsOnLine = pointsOnLine + 1
-		
+
 		if pointsOnLine >= POINTS_PER_LINE or i == #recordedPoints then
 			table.insert(lines, currentLine)
 			currentLine = ""
 			pointsOnLine = 0
 		end
 	end
-	
+
 	table.insert(lines, "}")
 	return table.concat(lines, "\n")
 end
@@ -426,11 +494,11 @@ local function computePathToStart(startPos, targetPos)
 		AgentMaxSlope = 45,
 		WaypointSpacing = 3,
 	})
-	
+
 	local success = pcall(function()
 		path:ComputeAsync(startPos, targetPos)
 	end)
-	
+
 	if success and path.Status == Enum.PathStatus.Success then
 		return path
 	end
@@ -439,7 +507,7 @@ end
 
 local function navigateToFirstPoint(hum, root, targetPos)
 	if not navigatingToStart then return true end
-	
+
 	local distToStart = (root.Position - targetPos).Magnitude
 	if distToStart < 4 then
 		navigatingToStart = false
@@ -449,21 +517,21 @@ local function navigateToFirstPoint(hum, root, targetPos)
 		StatusLabel.Text = "Status: Reached start point!"
 		return true
 	end
-	
+
 	if not currentPath then
 		StatusLabel.Text = "Status: Computing path to start..."
 		currentPath = computePathToStart(root.Position, targetPos)
 		currentWaypointIndex = 1
-		
+
 		if not currentPath then
 			StatusLabel.Text = "Status: Moving directly to start..."
 			hum:MoveTo(targetPos)
 			return false
 		end
 	end
-	
+
 	local waypoints = currentPath:GetWaypoints()
-	
+
 	while currentWaypointIndex <= #waypoints do
 		local wp = waypoints[currentWaypointIndex]
 		if (root.Position - wp.Position).Magnitude < 4 then
@@ -472,20 +540,20 @@ local function navigateToFirstPoint(hum, root, targetPos)
 			break
 		end
 	end
-	
+
 	if currentWaypointIndex <= #waypoints then
 		local wp = waypoints[currentWaypointIndex]
 		hum:MoveTo(wp.Position)
-		
+
 		if wp.Action == Enum.PathWaypointAction.Jump then
 			hum.Jump = true
 		end
-		
+
 		StatusLabel.Text = string.format("Status: Navigating (%d/%d)", currentWaypointIndex, #waypoints)
 	else
 		currentPath = nil
 	end
-	
+
 	return false
 end
 
@@ -498,27 +566,30 @@ local function startRecording()
 		StatusLabel.Text = "Status: Stop playback first!"
 		return
 	end
-	
+
 	if relativeMode and not targetPlayer then
 		StatusLabel.Text = "Status: Set a target first!"
 		return
 	end
-	
+
+	POINTS_PER_LINE = tonumber(PerLineBox.Text) or 3
+	STOP_SPEED_THRESHOLD = tonumber(StopSpeedBox.Text) or 1.5
+
 	isRecording = true
 	recordedPoints = {}
 	lastJumpState = false
-	
+
 	RecordButton.BackgroundColor3 = Color3.fromRGB(150, 30, 30)
 	StatusLabel.Text = "Status: Recording..."
 	StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-	
+
 	recordConnection = RunService.RenderStepped:Connect(function()
 		local now = tick()
 		local char = player.Character
 		if char then
 			local root = char:FindFirstChild("HumanoidRootPart")
-			local hum = char:FindFirstChild("Humanoid")
-			
+			local hum  = char:FindFirstChild("Humanoid")
+
 			if root and hum then
 				local targetPos = Vector3.zero
 				if relativeMode and targetPlayer and targetPlayer.Character then
@@ -527,46 +598,61 @@ local function startRecording()
 						targetPos = targetRoot.Position
 					end
 				end
-				
+
+				local currentAngle = getLookAngle(root)
+
 				local isJumping = false
 				local velocityY = root.AssemblyLinearVelocity.Y
 				local isInAir = hum.FloorMaterial == Enum.Material.Air
-				
 				if (velocityY > 2 and isInAir) or (hum.Jump and not lastJumpState) then
 					isJumping = true
 				end
-				
+
+				local vel = root.AssemblyLinearVelocity
+				local horizSpeed = Vector2.new(vel.X, vel.Z).Magnitude
+				local isStopped = (horizSpeed < STOP_SPEED_THRESHOLD) and not isInAir
+
+				FaceInfoLabel.Text = string.format(
+					"Face: %.1f° | Stopped: %s | Speed: %.1f",
+					math.deg(currentAngle),
+					tostring(isStopped),
+					horizSpeed
+				)
+
 				if now - lastRecordTime >= RECORD_INTERVAL then
 					local offset = relativeMode and (root.Position - targetPos) or root.Position
-					
+
 					table.insert(recordedPoints, {
-						offset = offset,
-						jump = isJumping
+						offset  = offset,
+						angle   = currentAngle,
+						jump    = isJumping,
+						stopped = isStopped,
 					})
 					updateDisplay()
 					lastRecordTime = now
 				end
-				
+
 				lastJumpState = hum.Jump
 			end
 		end
-		
+
 		updateRadiusCircle()
 	end)
 end
 
 local function stopRecording()
 	if not isRecording then return end
-	
+
 	isRecording = false
 	if recordConnection then
 		recordConnection:Disconnect()
 		recordConnection = nil
 	end
-	
+
 	RecordButton.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
 	StatusLabel.Text = "Status: Stopped - " .. #recordedPoints .. " points"
 	StatusLabel.TextColor3 = Color3.fromRGB(100, 200, 100)
+	FaceInfoLabel.Text = "Face: — | Stopped: —"
 	updateDisplay()
 end
 
@@ -578,42 +664,46 @@ local function startPlayback()
 		StatusLabel.Text = "Status: No points recorded!"
 		return
 	end
-	
+
 	if isRecording then
 		stopRecording()
 	end
-	
+
 	if isPlaying then return end
-	
+
 	if relativeMode and not targetPlayer then
 		StatusLabel.Text = "Status: Set a target first!"
 		return
 	end
-	
+
 	isPlaying = true
 	navigatingToStart = true
 	startPointReached = false
 	currentPath = nil
 	currentWaypointIndex = 1
-	
+	stopHoldTimer = 0
+
 	PlayButton.BackgroundColor3 = Color3.fromRGB(30, 150, 70)
 	StatusLabel.Text = "Status: Navigating to start..."
 	StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
-	
+
 	local index = 1
 	local char = player.Character
 	local hum = char and char:FindFirstChild("Humanoid")
 	local root = char and char:FindFirstChild("HumanoidRootPart")
-	
+
 	if not hum or not root then
 		StatusLabel.Text = "Status: Character not found"
 		isPlaying = false
 		return
 	end
-	
+
+	-- Sync currentFacingAngle to actual facing to avoid spin on start
+	currentFacingAngle = getLookAngle(root)
+
 	local jumpTriggered = false
-	
-	playConnection = RunService.RenderStepped:Connect(function()
+
+	playConnection = RunService.RenderStepped:Connect(function(dt)
 		if not isPlaying then
 			if playConnection then
 				playConnection:Disconnect()
@@ -621,15 +711,15 @@ local function startPlayback()
 			end
 			return
 		end
-		
+
 		char = player.Character
-		hum = char and char:FindFirstChild("Humanoid")
+		hum  = char and char:FindFirstChild("Humanoid")
 		root = char and char:FindFirstChild("HumanoidRootPart")
-		
+
 		if not hum or not root then return end
-		
+
 		updateRadiusCircle()
-		
+
 		local targetPos = Vector3.zero
 		if relativeMode and targetPlayer and targetPlayer.Character then
 			local targetRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -642,17 +732,15 @@ local function startPlayback()
 				return
 			end
 		end
-		
+
 		local firstOffset = recordedPoints[1].offset
 		local firstPointPos = relativeMode and (targetPos + firstOffset) or firstOffset
-		
+
 		if navigatingToStart then
 			local reached = navigateToFirstPoint(hum, root, firstPointPos)
-			if not reached then
-				return
-			end
+			if not reached then return end
 		end
-		
+
 		if relativeMode then
 			local distToTarget = (root.Position - targetPos).Magnitude
 			if distToTarget > RADIUS + 5 then
@@ -661,33 +749,69 @@ local function startPlayback()
 				return
 			end
 		end
-		
+
 		if index <= #recordedPoints then
 			local data = recordedPoints[index]
 			local targetMovePos = relativeMode and (targetPos + data.offset) or data.offset
-			
+
+			-- Smoothly rotate toward recorded facing angle
+			applyFacingSmooth(root, data.angle, dt)
+
+			-- Handle stopped frames
+			if data.stopped then
+				hum:MoveTo(root.Position)
+				stopHoldTimer = stopHoldTimer + dt
+				StatusLabel.Text = string.format("Playing... %d/%d [STOP]", index, #recordedPoints)
+				if stopHoldTimer >= STOP_HOLD_DURATION then
+					stopHoldTimer = 0
+					index = index + 1
+				end
+				return
+			else
+				stopHoldTimer = 0
+			end
+
 			hum:MoveTo(targetMovePos)
-			
+
 			if data.jump and not jumpTriggered then
 				hum.Jump = true
 				jumpTriggered = true
 			elseif jumpTriggered and hum.FloorMaterial ~= Enum.Material.Air then
 				jumpTriggered = false
 			end
-			
+
 			local distance = (root.Position - targetMovePos).Magnitude
 			local horizontalDist = (Vector3.new(root.Position.X, 0, root.Position.Z) - Vector3.new(targetMovePos.X, 0, targetMovePos.Z)).Magnitude
-			
-			local threshold = data.jump and 4 or 3
+
+			local threshold = data.jump and 4 or 1.5
 			local distToUse = data.jump and horizontalDist or distance
-			
+
 			if distToUse < threshold then
 				index = index + 1
 			end
-			
+
 			StatusLabel.Text = string.format("Playing... %d/%d", index - 1, #recordedPoints)
 		else
-			stopPlayback()
+			isPlaying = false
+			navigatingToStart = false
+			startPointReached = false
+			currentPath = nil
+
+			if playConnection then
+				playConnection:Disconnect()
+				playConnection = nil
+			end
+
+			PlayButton.BackgroundColor3 = Color3.fromRGB(50, 200, 100)
+
+			local stopChar = player.Character
+			if stopChar then
+				local stopHum = stopChar:FindFirstChild("Humanoid")
+				if stopHum and stopChar:FindFirstChild("HumanoidRootPart") then
+					stopHum:MoveTo(stopChar.HumanoidRootPart.Position)
+				end
+			end
+
 			StatusLabel.Text = "Status: Playback complete!"
 			StatusLabel.TextColor3 = Color3.fromRGB(100, 200, 100)
 		end
@@ -696,19 +820,20 @@ end
 
 local function stopPlayback()
 	if not isPlaying then return end
-	
+
 	isPlaying = false
 	navigatingToStart = false
 	startPointReached = false
 	currentPath = nil
-	
+	stopHoldTimer = 0
+
 	if playConnection then
 		playConnection:Disconnect()
 		playConnection = nil
 	end
-	
+
 	PlayButton.BackgroundColor3 = Color3.fromRGB(50, 200, 100)
-	
+
 	local char = player.Character
 	if char then
 		local hum = char:FindFirstChild("Humanoid")
@@ -716,7 +841,7 @@ local function stopPlayback()
 			hum:MoveTo(char.HumanoidRootPart.Position)
 		end
 	end
-	
+
 	if #recordedPoints > 0 then
 		StatusLabel.Text = "Status: Stopped"
 		StatusLabel.TextColor3 = Color3.fromRGB(100, 200, 100)
@@ -732,7 +857,7 @@ local function setTarget()
 		TargetStatus.Text = "Enter a name!"
 		return
 	end
-	
+
 	local found = findPlayer(name)
 	if found then
 		targetPlayer = found
@@ -751,10 +876,10 @@ local function copyToClipboard()
 		StatusLabel.Text = "Status: Nothing to copy!"
 		return
 	end
-	
+
 	POINTS_PER_LINE = tonumber(PerLineBox.Text) or 3
 	local code = generateCode()
-	
+
 	pcall(function()
 		setclipboard(code)
 		StatusLabel.Text = "Status: Copied! (" .. #recordedPoints .. " points)"
@@ -765,8 +890,9 @@ end
 local function clearRecording()
 	if isRecording then stopRecording() end
 	if isPlaying then stopPlayback() end
-	
+
 	recordedPoints = {}
+	FaceInfoLabel.Text = "Face: — | Stopped: —"
 	updateDisplay()
 	StatusLabel.Text = "Status: Cleared"
 	StatusLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
