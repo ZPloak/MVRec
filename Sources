@@ -600,6 +600,13 @@ local function startRecording()
 				end
 
 				local currentAngle = getLookAngle(root)
+				if relativeMode and targetPlayer and targetPlayer.Character then
+    				local targetRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+   				 if targetRoot then
+        				local victimAngle = getLookAngle(targetRoot)
+        				currentAngle = currentAngle - victimAngle
+    				end
+				end
 
 				local isJumping = false
                  velocityY = root.AssemblyLinearVelocity.Y
