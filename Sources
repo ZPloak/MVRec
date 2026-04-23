@@ -602,11 +602,11 @@ local function startRecording()
 				local currentAngle = getLookAngle(root)
 
 				local isJumping = false
-				local velocityY = root.AssemblyLinearVelocity.Y
-				local isInAir = hum.FloorMaterial == Enum.Material.Air
-				if (velocityY > 2 and isInAir) or (hum.Jump and not lastJumpState) then
-					isJumping = true
-				end
+                 velocityY = root.AssemblyLinearVelocity.Y
+                local isInAir = hum.FloorMaterial == Enum.Material.Air
+                if (velocityY > 5 and isInAir) or (hum.Jump and not lastJumpState) then
+	                isJumping = true
+                end
 
 				local vel = root.AssemblyLinearVelocity
 				local horizSpeed = Vector2.new(vel.X, vel.Z).Magnitude
@@ -783,12 +783,12 @@ local function startPlayback()
 			local distance = (root.Position - targetMovePos).Magnitude
 			local horizontalDist = (Vector3.new(root.Position.X, 0, root.Position.Z) - Vector3.new(targetMovePos.X, 0, targetMovePos.Z)).Magnitude
 
-			local threshold = data.jump and 4 or 1.5
-			local distToUse = data.jump and horizontalDist or distance
+			local threshold = data.jump and 6 or 2
+            local distToUse = data.jump and horizontalDist or distance
 
-			if distToUse < threshold then
-				index = index + 1
-			end
+            if distToUse < threshold then
+	            index = index + 1
+            end
 
 			StatusLabel.Text = string.format("Playing... %d/%d", index - 1, #recordedPoints)
 		else
